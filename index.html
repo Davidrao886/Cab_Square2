@@ -94,12 +94,31 @@
         let auth;
         let userId = null;
         
+        // --- DEPLOYMENT FIX: Hardcoded Firebase Config ---
+        // 1. Go to your Firebase project console.
+        // 2. Add a Web App, and copy the config object it provides.
+        // 3. **REPLACE** all the placeholder values below with your actual keys.
+        const MY_FIREBASE_CONFIG = {
+           apiKey: "AIzaSyD__Ua-7KtBO6vyHa9eKMcwrZ2nl96IsSU",
+           authDomain: "cabsquare-c4533.firebaseapp.com",
+           projectId: "cabsquare-c4533",
+           storageBucket: "cabsquare-c4533.firebasestorage.app",
+           messagingSenderId: "479195339907",
+           appId: "1:479195339907:web:b9a6300cb35ea7330d4fb6",
+        };
+        // ----------------------------------------------------
+
         // ** Global Variables provided by the Canvas Environment **
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // We use a custom 'appId' to scope the data in Firestore (artifacts/appId/...)
+        const CANVAS_APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'cab-square-deployed';
+        // The deployment config will be used if the environment config is missing.
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
-            : null; 
+            : MY_FIREBASE_CONFIG; 
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Use the proper app ID: the canvas ID if available, otherwise the hardcoded deployment slug
+        const appId = typeof __app_id !== 'undefined' ? __app_id : CANVAS_APP_ID;
 
         const statusMessage = document.getElementById('status-message');
         const mainContent = document.getElementById('main-content');
@@ -115,8 +134,8 @@
         // --- Firebase Initialization and Authentication ---
         function initFirebase() {
             try {
-                if (!firebaseConfig) {
-                    updateStatus("FATAL: Firebase Configuration not found. Cannot initialize application.", true);
+                if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
+                    updateStatus("FATAL: Firebase Configuration not found or not updated. Please set your keys.", true);
                     return;
                 }
 
@@ -131,7 +150,6 @@
                         // User successfully signed in (either via token or anonymously)
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
-                        updateStatus(`Authenticated successfully. Welcome, User: ${userId}`, false);
                         statusMessage.classList.add('hidden'); // Hide status on success
                         mainContent.classList.remove('hidden');
 
@@ -139,16 +157,18 @@
                         loadRides();
 
                     } else {
-                        // Attempt sign-in with the token, or anonymously if token is absent/expired
+                        // If running in canvas, try token first. If deployed, we go straight to anonymous.
                         try {
                             if (initialAuthToken) {
                                 await signInWithCustomToken(auth, initialAuthToken);
                             } else {
+                                // This handles anonymous sign-in for deployed version
                                 await signInAnonymously(auth);
                             }
+                            updateStatus(`Authenticated successfully. Welcome!`, false);
                         } catch (error) {
-                            updateStatus(`Authentication failed entirely. Check Firebase setup.`, true);
-                            console.error("Final Authentication Error:", error);
+                            updateStatus(`Authentication failed. Check Firebase console for anonymous auth settings.`, true);
+                            console.error("Authentication Error:", error);
                         }
                     }
                 });
@@ -163,6 +183,7 @@
         
         // Public collection path for rides visible to everyone
         const getRidesCollectionRef = () => {
+            // Note: This path uses the appId (either canvas-provided or hardcoded slug)
             return collection(db, `artifacts/${appId}/public/data/rides`);
         };
 
@@ -279,3 +300,5 @@
     </script>
 </body>
 </html>
+
+
