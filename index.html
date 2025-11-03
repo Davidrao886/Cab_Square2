@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cab Square - Dynamic Cab-Sharing</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Styles for aesthetic appeal */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+        .container {
+            max-width: 90%;
+            margin: auto;
+        }
+        @media (min-width: 640px) {
+            .container {
+                max-width: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-blue-600 tracking-tight">
+                Cab Square
+            </h1>
+            <p class="text-lg text-gray-500 mt-1">Share your commute, earn income.</p>
+        </header>
+
+        <!-- Loading and Status Area -->
+        <div id="status-message" class="mb-4 p-3 bg-yellow-100 text-yellow-700 rounded-lg shadow-md" role="alert">
+            Initializing application...
+        </div>
+
+        <div id="main-content" class="space-y-10 hidden">
+            <!-- User Info Card -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-blue-500">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">Welcome!</h2>
+                <p class="text-sm text-gray-500">Your User ID: <span id="user-id-display" class="font-mono text-xs bg-gray-100 p-1 rounded">Loading...</span></p>
+                <p class="text-sm text-gray-500 mt-2">Use this ID for coordinating with fellow users.</p>
+            </div>
+
+            <!-- 1. Host Ride Posting Form -->
+            <div class="bg-white p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Post a Ride (Host)</h2>
+                <form id="ride-post-form" onsubmit="postRide(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="origin" class="block text-sm font-medium text-gray-700">Origin (Place A)</label>
+                            <input type="text" id="origin" required class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-3 focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="destination" class="block text-sm font-medium text-gray-700">Destination (Place B)</label>
+                            <input type="text" id="destination" required class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-3 focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="seats" class="block text-sm font-medium text-gray-700">Vacant Seats</label>
+                            <input type="number" id="seats" required min="1" max="4" value="3" class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-3 focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <button type="submit" class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out font-semibold">
+                            Post Ride & Share
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 2. Available Rides List -->
+            <div class="bg-white p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Available Rides (Passengers)</h2>
+                <div id="rides-list" class="space-y-4">
+                    <p class="text-gray-500 text-center" id="empty-state">No rides posted yet. Be the first Host!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
+        // Set Firebase Log Level
+        setLogLevel('Debug');
+
+        // Global variables for Firebase services
+        let db;
+        let auth;
+        let userId = null;
+        
+        // ** Global Variables provided by the Canvas Environment **
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : null; 
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const statusMessage = document.getElementById('status-message');
+        const mainContent = document.getElementById('main-content');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // Function to update the status message
+        function updateStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove('hidden', 'bg-yellow-100', 'bg-red-100', 'text-yellow-700', 'text-red-700');
+            statusMessage.classList.add(isError ? 'bg-red-100' : 'bg-yellow-100', isError ? 'text-red-700' : 'text-yellow-700');
+        }
+
+        // --- Firebase Initialization and Authentication ---
+        function initFirebase() {
+            try {
+                if (!firebaseConfig) {
+                    updateStatus("FATAL: Firebase Configuration not found. Cannot initialize application.", true);
+                    return;
+                }
+
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                updateStatus("Authenticating user...");
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        // User successfully signed in (either via token or anonymously)
+                        userId = user.uid;
+                        userIdDisplay.textContent = userId;
+                        updateStatus(`Authenticated successfully. Welcome, User: ${userId}`, false);
+                        statusMessage.classList.add('hidden'); // Hide status on success
+                        mainContent.classList.remove('hidden');
+
+                        // Start listening for real-time ride updates
+                        loadRides();
+
+                    } else {
+                        // Attempt sign-in with the token, or anonymously if token is absent/expired
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (error) {
+                            updateStatus(`Authentication failed entirely. Check Firebase setup.`, true);
+                            console.error("Final Authentication Error:", error);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                updateStatus(`Critical initialization error: ${error.message}`, true);
+                console.error("Init Error:", error);
+            }
+        }
+
+        // --- Firestore Data Operations ---
+        
+        // Public collection path for rides visible to everyone
+        const getRidesCollectionRef = () => {
+            return collection(db, `artifacts/${appId}/public/data/rides`);
+        };
+
+        // Function to handle posting a ride (Host action)
+        window.postRide = async (event) => {
+            event.preventDefault();
+            if (!userId) {
+                updateStatus("Authentication not ready. Please wait.", true);
+                return;
+            }
+
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const seats = parseInt(document.getElementById('seats').value, 10);
+
+            if (seats < 1 || seats > 4) {
+                 updateStatus("Please enter 1 to 4 vacant seats.", true);
+                 return;
+            }
+
+            // Simple fare simulation: $2 per seat per trip
+            const estimatedFare = seats * 2; 
+
+            const rideData = {
+                hostId: userId,
+                origin: origin,
+                destination: destination,
+                vacantSeats: seats,
+                farePerSeat: 2.00, // Fare for a single passenger
+                estimatedTotalFare: estimatedFare,
+                postedAt: serverTimestamp()
+            };
+
+            try {
+                // Add the new ride document to the public collection
+                await addDoc(getRidesCollectionRef(), rideData);
+                document.getElementById('ride-post-form').reset();
+                updateStatus("Ride posted successfully! Waiting for passengers.", false);
+                setTimeout(() => statusMessage.classList.add('hidden'), 3000);
+            } catch (error) {
+                updateStatus(`Error posting ride: ${error.message}`, true);
+                console.error("Firestore Post Error:", error);
+            }
+        };
+
+        // Function to load and render rides in real-time
+        function loadRides() {
+            if (!db) return;
+
+            const ridesListElement = document.getElementById('rides-list');
+            const emptyStateElement = document.getElementById('empty-state');
+            const ridesQuery = query(getRidesCollectionRef());
+
+            // Listen for real-time updates using onSnapshot
+            onSnapshot(ridesQuery, (snapshot) => {
+                ridesListElement.innerHTML = '';
+                const rides = [];
+                snapshot.forEach((doc) => {
+                    rides.push({ id: doc.id, ...doc.data() });
+                });
+
+                if (rides.length === 0) {
+                    emptyStateElement.classList.remove('hidden');
+                    return;
+                } else {
+                    emptyStateElement.classList.add('hidden');
+                }
+
+                // Sort by post time (newest first - client-side sorting as orderBy can require indexes)
+                rides.sort((a, b) => {
+                    const timeA = a.postedAt?.toMillis ? a.postedAt.toMillis() : new Date(a.postedAt).getTime();
+                    const timeB = b.postedAt?.toMillis ? b.postedAt.toMillis() : new Date(b.postedAt).getTime();
+                    return timeB - timeA;
+                });
+
+                rides.forEach(ride => {
+                    const rideCard = document.createElement('div');
+                    rideCard.className = 'ride-card p-4 border border-gray-200 bg-gray-50 rounded-lg shadow-sm hover:shadow-md transition duration-200';
+                    
+                    const isHost = ride.hostId === userId;
+                    const hostStatus = isHost ? 'You are the Host' : 'Available';
+                    const buttonText = isHost ? 'View Bookings' : 'Book Seat';
+                    const buttonColor = isHost ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-blue-500 hover:bg-blue-600';
+                    const hostLabelColor = isHost ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : 'text-green-600 border-green-200 bg-green-50';
+
+                    rideCard.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-xl font-semibold text-gray-900">${ride.origin} <span class="text-lg font-light text-gray-500">&rarr;</span> ${ride.destination}</h3>
+                            <span class="px-2 py-0.5 text-xs font-medium rounded-full border ${hostLabelColor}">${hostStatus}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-1">
+                            <strong class="font-medium">Seats:</strong> ${ride.vacantSeats} available
+                        </p>
+                        <p class="text-sm text-gray-600 mb-3">
+                            <strong class="font-medium">Fare per Seat:</strong> $${ride.farePerSeat.toFixed(2)} (est.)
+                        </p>
+                        <p class="text-xs text-gray-400 mb-3">
+                            Host ID: <span class="font-mono">${ride.hostId}</span>
+                        </p>
+                        <button class="w-full py-2 px-3 text-sm font-semibold rounded-md text-white ${buttonColor} transition duration-150 ease-in-out">
+                            ${buttonText}
+                        </button>
+                    `;
+                    ridesListElement.appendChild(rideCard);
+                });
+            }, (error) => {
+                updateStatus(`Error listening to rides: ${error.message}`, true);
+                console.error("onSnapshot Error:", error);
+            });
+        }
+
+        // Start the initialization process
+        window.onload = initFirebase;
+    </script>
+</body>
+</html>
