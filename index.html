@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ride Square - Share Your Journey</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <div class="logo-icon">🚗</div>
+                        <h1>Ride Square</h1>
+                    </div>
+                    <button id="postRideBtn" class="btn-primary">
+                        ➕ Post a Ride
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="container">
+            <!-- Post Ride Form -->
+            <div id="postRideForm" class="form-card hidden">
+                <h2>Post Your Ride</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Your Name *</label>
+                        <input type="text" id="driverName" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number *</label>
+                        <input type="tel" id="phone" placeholder="+91 98765 43210" required>
+                    </div>
+                    <div class="form-group">
+                        <label>From *</label>
+                        <input type="text" id="from" placeholder="Noida" required>
+                    </div>
+                    <div class="form-group">
+                        <label>To *</label>
+                        <input type="text" id="to" placeholder="Delhi" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Time *</label>
+                        <input type="time" id="time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Available Seats *</label>
+                        <input type="number" id="seats" min="1" max="8" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Price per Seat (₹) *</label>
+                        <input type="number" id="pricePerSeat" placeholder="200" required>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button id="submitRide" class="btn-primary">
+                        <span id="submitText">Post Ride</span>
+                        <span id="submitLoader" class="loader hidden"></span>
+                    </button>
+                    <button id="cancelPost" class="btn-secondary">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-card">
+                <div class="search-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Search by location or driver name...">
+                </div>
+            </div>
+
+            <!-- Rides List -->
+            <div class="rides-section">
+                <h2>Available Rides</h2>
+                <div id="loadingIndicator" class="loading-state hidden">
+                    <div class="spinner"></div>
+                    <p>Loading rides...</p>
+                </div>
+                <div id="ridesList"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
